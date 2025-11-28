@@ -1,0 +1,21 @@
+{
+  "example.com": {
+    "alice": {
+      "avg_typing_speed": 197.0,
+      "std_typing_speed": 2.5,
+      "device_fingerprints": [
+        "abc123",
+        "unknown"
+      ],
+      "locations": [
+        "US",
+        "RU"
+      ],
+      "typical_hours": [
+        2,
+        9
+      ],
+      "samples": 5
+    }
+  }
+}

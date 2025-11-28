@@ -399,6 +399,12 @@ body {
   text-align: center;
 }
 
+/* Admin modal tweaks */
+.modal-content textarea {
+  font-size: 0.9em;
+  border: 1px solid #e0e0e0;
+}
+
 .investigation-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 function App() {
   const [alerts, setAlerts] = useState([]);
@@ -8,6 +8,8 @@ function App() {
   const [expandedAlert, setExpandedAlert] = useState(null);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [showInvestigation, setShowInvestigation] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminPayload, setAdminPayload] = useState('');
   const [stats, setStats] = useState({ critical: 0, high: 0, medium: 0, low: 0, info: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -21,8 +23,8 @@ function App() {
     try {
       const res = await fetch('/api/alerts');
       const data = await res.json();
-      setAlerts(data);
-      calculateStats(data);
+      setAlerts(data || []);
+      calculateStats(data || []);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching alerts:', err);
@@ -32,37 +34,21 @@ function App() {
   const calculateStats = (alertList) => {
     const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
     alertList.forEach(a => {
-      if (counts.hasOwnProperty(a.severity)) {
-        counts[a.severity]++;
-      }
+      if (a.status !== 'resolved' && counts.hasOwnProperty(a.severity)) counts[a.severity]++;
     });
     setStats(counts);
   };
 
-  const filteredAlerts = alerts
-    .filter(a => a.status !== 'resolved')
-    .filter(a => filter === 'all' || a.severity === filter);
+  const filteredAlerts = alerts.filter(a => a.status !== 'resolved').filter(a => filter === 'all' || a.severity === filter);
 
   const getSeverityColor = (severity) => {
-    const colors = {
-      critical: '#ff1744',
-      high: '#ff6b6b',
-      medium: '#ffa502',
-      low: '#ffd93d',
-      info: '#6bcf7f'
-    };
+    const colors = { critical: '#ff1744', high: '#ff6b6b', medium: '#ffa502', low: '#ffd93d', info: '#6bcf7f' };
     return colors[severity] || '#999';
   };
 
   const getSeverityBgColor = (severity) => {
-    const colors = {
-      critical: 'rgba(255, 23, 68, 0.1)',
-      high: 'rgba(255, 107, 107, 0.1)',
-      medium: 'rgba(255, 165, 2, 0.1)',
-      low: 'rgba(255, 217, 61, 0.1)',
-      info: 'rgba(107, 207, 127, 0.1)'
-    };
-    return colors[severity] || 'rgba(0, 0, 0, 0.05)';
+    const colors = { critical: 'rgba(255,23,68,0.08)', high: 'rgba(255,107,107,0.06)', medium: 'rgba(255,165,2,0.06)', low: 'rgba(255,217,61,0.06)', info: 'rgba(107,207,127,0.06)' };
+    return colors[severity] || 'rgba(0,0,0,0.03)';
   };
 
   const markResolved = (id) => {
@@ -79,97 +65,69 @@ function App() {
     ].filter(d => d.value > 0);
   };
 
-  const openInvestigation = (alert) => {
-    setSelectedAlert(alert);
-    setShowInvestigation(true);
+  const openInvestigate = (alert) => { setSelectedAlert(alert); setShowInvestigation(true); };
+  const closeInvestigation = () => { setShowInvestigation(false); setSelectedAlert(null); };
+
+  const openAdmin = () => { setShowAdmin(true); };
+  const closeAdmin = () => { setShowAdmin(false); setAdminPayload(''); };
+
+  const submitAdminProfile = async () => {
+    try {
+      const parsed = JSON.parse(adminPayload);
+      const res = await fetch('http://127.0.0.1:8100/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed) });
+      if (!res.ok) { const txt = await res.text(); alert('Reporter error: ' + txt); return; }
+      alert('Profile created on automated reporter');
+      closeAdmin();
+    } catch (e) { alert('Invalid JSON payload: ' + e.message); }
   };
 
-  const closeInvestigation = () => {
-    setShowInvestigation(false);
-    setSelectedAlert(null);
+  // Create profile payload from selected alert (used by 'Create profile from alert')
+  const createProfilePayloadFromAlert = (alert) => {
+    const site = alert.additional && alert.additional.site ? alert.additional.site : 'imported-site';
+    const exampleEvent = {
+      site: site,
+      username: alert.username,
+      device_fingerprint: (alert.additional && alert.additional.device_fingerprint) || '',
+      typing_speed: (alert.additional && alert.additional.typing_speed) || null,
+      location: (alert.additional && alert.additional.location) || '',
+      access_time: alert.created_at || new Date().toISOString(),
+      user_agent: (alert.additional && alert.additional.user_agent) || '',
+      ip_address: (alert.additional && alert.additional.ip_address) || ''
+    };
+    return { site: site, username: alert.username, events: [exampleEvent] };
   };
 
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading Dashboard...</p>
-      </div>
-    );
-  }
+  if (loading) return (<div className="loading-container"><div className="spinner"></div><p>Loading Dashboard...</p></div>);
 
   return (
     <div className="app-container">
       <header className="header">
         <div className="header-content">
-          <h1 className="header-title">
-            <span className="icon">🛡️</span> AI Intrusion & Anomaly Detector
-          </h1>
+          <h1 className="header-title"><span className="icon">🛡️</span> AI Intrusion & Anomaly Detector</h1>
           <p className="header-subtitle">Real-time behavioral anomaly detection with advanced threat analysis</p>
+          <div style={{ marginTop: 12 }}>
+            <button className="btn btn-investigate" onClick={openAdmin} style={{ padding: '8px 12px' }}>⚙️ Admin: Reporter</button>
+          </div>
         </div>
       </header>
 
       <main className="main-content">
-        {/* Top Section: Stats + Pie Chart */}
         <section className="dashboard-top">
-          {/* Left Side: Stats Cards */}
           <div className="stats-left">
             <h2 className="section-subtitle">Alert Summary</h2>
-            <div className="stat-item critical-stat">
-              <div className="stat-icon-lg">🔴</div>
-              <div className="stat-info">
-                <div className="stat-value-lg">{stats.critical}</div>
-                <div className="stat-label-lg">Critical</div>
-              </div>
-            </div>
-            <div className="stat-item high-stat">
-              <div className="stat-icon-lg">⚠️</div>
-              <div className="stat-info">
-                <div className="stat-value-lg">{stats.high}</div>
-                <div className="stat-label-lg">High</div>
-              </div>
-            </div>
-            <div className="stat-item medium-stat">
-              <div className="stat-icon-lg">⚡</div>
-              <div className="stat-info">
-                <div className="stat-value-lg">{stats.medium}</div>
-                <div className="stat-label-lg">Medium</div>
-              </div>
-            </div>
-            <div className="stat-item low-stat">
-              <div className="stat-icon-lg">ℹ️</div>
-              <div className="stat-info">
-                <div className="stat-value-lg">{stats.low}</div>
-                <div className="stat-label-lg">Low</div>
-              </div>
-            </div>
-            <div className="stat-item info-stat">
-              <div className="stat-icon-lg">ℹ️</div>
-              <div className="stat-info">
-                <div className="stat-value-lg">{stats.info}</div>
-                <div className="stat-label-lg">Info</div>
-              </div>
-            </div>
+            <div className="stat-item critical-stat"><div className="stat-icon-lg">🔴</div><div className="stat-info"><div className="stat-value-lg">{stats.critical}</div><div className="stat-label-lg">Critical</div></div></div>
+            <div className="stat-item high-stat"><div className="stat-icon-lg">⚠️</div><div className="stat-info"><div className="stat-value-lg">{stats.high}</div><div className="stat-label-lg">High</div></div></div>
+            <div className="stat-item medium-stat"><div className="stat-icon-lg">⚡</div><div className="stat-info"><div className="stat-value-lg">{stats.medium}</div><div className="stat-label-lg">Medium</div></div></div>
+            <div className="stat-item low-stat"><div className="stat-icon-lg">ℹ️</div><div className="stat-info"><div className="stat-value-lg">{stats.low}</div><div className="stat-label-lg">Low</div></div></div>
+            <div className="stat-item info-stat"><div className="stat-icon-lg">📘</div><div className="stat-info"><div className="stat-value-lg">{stats.info}</div><div className="stat-label-lg">Info</div></div></div>
           </div>
 
-          {/* Right Side: Pie Chart */}
           <div className="pie-chart-container">
             <h2 className="section-subtitle">Risk Distribution</h2>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
-                <Pie
-                  data={getPieChartData()}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {getPieChartData().map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
+                <Pie data={getPieChartData()} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} fill="#8884d8" dataKey="value">
+                  {getPieChartData().map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
                 </Pie>
                 <Tooltip formatter={(value) => `${value} alerts`} />
               </PieChart>
@@ -180,12 +138,7 @@ function App() {
         <section className="filter-section">
           <div className="filter-group">
             <label htmlFor="severity-filter">Filter by Severity:</label>
-            <select
-              id="severity-filter"
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              className="filter-select"
-            >
+            <select id="severity-filter" value={filter} onChange={e => setFilter(e.target.value)} className="filter-select">
               <option value="all">All Alerts</option>
               <option value="critical">🔴 Critical</option>
               <option value="high">🟠 High</option>
@@ -199,99 +152,28 @@ function App() {
 
         <section className="alerts-section">
           <h2 className="section-title">Active Alerts</h2>
-          {filteredAlerts.length === 0 ? (
-            <div className="no-alerts">
-              <p>✓ No alerts to display</p>
-            </div>
-          ) : (
+          {filteredAlerts.length === 0 ? (<div className="no-alerts"><p>✓ No alerts to display</p></div>) : (
             <div className="alerts-container">
               {filteredAlerts.map((alert, idx) => (
-                <div
-                  key={alert.alert_id}
-                  className="alert-card"
-                  style={{
-                    borderLeft: `4px solid ${getSeverityColor(alert.severity)}`,
-                    background: getSeverityBgColor(alert.severity),
-                    animation: `slideIn 0.5s ease-out ${idx * 0.05}s`
-                  }}
-                >
+                <div key={alert.alert_id} className="alert-card" style={{ borderLeft: `4px solid ${getSeverityColor(alert.severity)}`, background: getSeverityBgColor(alert.severity), animation: `slideIn 0.5s ease-out ${idx * 0.05}s` }}>
                   <div className="alert-header">
-                    <div className="alert-title">
-                      <span className="severity-badge" style={{ background: getSeverityColor(alert.severity) }}>
-                        {alert.severity.toUpperCase()}
-                      </span>
-                      <span className="alert-id">{alert.alert_id}</span>
-                      <span className="alert-status" style={{ color: getSeverityColor(alert.severity) }}>
-                        {alert.status === 'resolved' ? '✓' : '●'}
-                      </span>
-                    </div>
-                    <button
-                      className="expand-btn"
-                      onClick={() => setExpandedAlert(expandedAlert === alert.alert_id ? null : alert.alert_id)}
-                    >
-                      {expandedAlert === alert.alert_id ? '▼' : '▶'}
-                    </button>
+                    <div className="alert-title"><span className="severity-badge" style={{ background: getSeverityColor(alert.severity) }}>{alert.severity.toUpperCase()}</span><span className="alert-id">{alert.alert_id}</span><span className="alert-status" style={{ color: getSeverityColor(alert.severity) }}>{alert.status === 'resolved' ? '✓' : '●'}</span></div>
+                    <button className="expand-btn" onClick={() => setExpandedAlert(expandedAlert === alert.alert_id ? null : alert.alert_id)}>{expandedAlert === alert.alert_id ? '▼' : '▶'}</button>
                   </div>
 
                   <div className="alert-summary">
-                    <div className="summary-item">
-                      <span className="label">User:</span>
-                      <span className="value">{alert.username}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="label">Score:</span>
-                      <span className="value" style={{ color: getSeverityColor(alert.severity) }}>
-                        {alert.score.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="label">Action:</span>
-                      <span className="value action-badge" style={{ background: getSeverityColor(alert.severity) + '30' }}>
-                        {alert.action || 'monitor'}
-                      </span>
-                    </div>
+                    <div className="summary-item"><span className="label">User:</span><span className="value">{alert.username}</span></div>
+                    <div className="summary-item"><span className="label">Score:</span><span className="value" style={{ color: getSeverityColor(alert.severity) }}>{alert.score.toFixed(2)}</span></div>
+                    <div className="summary-item"><span className="label">Action:</span><span className="value action-badge" style={{ background: getSeverityColor(alert.severity) + '30' }}>{alert.action || 'monitor'}</span></div>
                   </div>
 
                   {expandedAlert === alert.alert_id && (
                     <div className="alert-details">
-                      <div className="details-section">
-                        <h4>Risk Factors:</h4>
-                        <ul>
-                          {alert.reasons.map((reason, i) => (
-                            <li key={i}>
-                              <span className="factor-icon">🔹</span> {reason}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="details-section">
-                        <h4>Detection Details:</h4>
-                        <div className="details-grid">
-                          <div>
-                            <strong>Created:</strong> {new Date(alert.created_at).toLocaleString()}
-                          </div>
-                          <div>
-                            <strong>Risk Factors:</strong> {alert.risk_factors.join(', ')}
-                          </div>
-                        </div>
-                      </div>
-
+                      <div className="details-section"><h4>Risk Factors:</h4><ul>{alert.reasons.map((reason, i) => (<li key={i}><span className="factor-icon">🔹</span> {reason}</li>))}</ul></div>
+                      <div className="details-section"><h4>Detection Details:</h4><div className="details-grid"><div><strong>Created:</strong> {new Date(alert.created_at).toLocaleString()}</div><div><strong>Risk Factors:</strong> {alert.risk_factors.join(', ')}</div></div></div>
                       <div className="action-buttons">
-                        {alert.status !== 'resolved' && (
-                          <button
-                            className="btn btn-resolve"
-                            onClick={() => markResolved(alert.alert_id)}
-                          >
-                            ✓ Mark as Resolved
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-investigate"
-                          onClick={() => openInvestigation(alert)}
-                        >
-                          🔍 Investigate
-                        </button>
+                        {alert.status !== 'resolved' && (<button className="btn btn-resolve" onClick={() => markResolved(alert.alert_id)}>✓ Mark as Resolved</button>)}
+                        <button className="btn btn-investigate" onClick={() => openInvestigate(alert)}>🔍 Investigate</button>
                         <button className="btn btn-isolate">🔒 Isolate Account</button>
                       </div>
                     </div>
@@ -308,133 +190,77 @@ function App() {
         <div className="modal-overlay" onClick={closeInvestigation}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={closeInvestigation}>✕</button>
-            
             <h2 className="modal-title">📋 Investigation Report</h2>
-            
             <div className="investigation-grid">
               <div className="investigation-card alert-overview">
                 <h3>Alert Overview</h3>
-                <div className="investigation-item">
-                  <span className="label">Alert ID:</span>
-                  <span className="value">{selectedAlert.alert_id}</span>
-                </div>
-                <div className="investigation-item">
-                  <span className="label">User:</span>
-                  <span className="value">{selectedAlert.username}</span>
-                </div>
-                <div className="investigation-item">
-                  <span className="label">Severity:</span>
-                  <span className="value" style={{ color: getSeverityColor(selectedAlert.severity), fontWeight: 'bold' }}>
-                    {selectedAlert.severity.toUpperCase()}
-                  </span>
-                </div>
-                <div className="investigation-item">
-                  <span className="label">Risk Score:</span>
-                  <span className="value risk-score">{(selectedAlert.score * 100).toFixed(0)}%</span>
-                </div>
-                <div className="investigation-item">
-                  <span className="label">Status:</span>
-                  <span className="value" style={{ 
-                    padding: '4px 8px', 
-                    borderRadius: '4px', 
-                    background: '#f0f0f0',
-                    color: '#333'
-                  }}>
-                    {selectedAlert.status}
-                  </span>
-                </div>
+                <div className="investigation-item"><span className="label">Alert ID:</span><span className="value">{selectedAlert.alert_id}</span></div>
+                <div className="investigation-item"><span className="label">User:</span><span className="value">{selectedAlert.username}</span></div>
+                <div className="investigation-item"><span className="label">Severity:</span><span className="value" style={{ color: getSeverityColor(selectedAlert.severity), fontWeight: 'bold' }}>{selectedAlert.severity.toUpperCase()}</span></div>
+                <div className="investigation-item"><span className="label">Risk Score:</span><span className="value risk-score">{(selectedAlert.score * 100).toFixed(0)}%</span></div>
+                <div className="investigation-item"><span className="label">Status:</span><span className="value" style={{ padding: '4px 8px', borderRadius: '4px', background: '#f0f0f0', color: '#333' }}>{selectedAlert.status}</span></div>
               </div>
 
               <div className="investigation-card threat-analysis">
                 <h3>Threat Analysis</h3>
-                <div className="threat-list">
-                  {selectedAlert.reasons.map((reason, idx) => (
-                    <div key={idx} className="threat-item">
-                      <span className="threat-icon">🚨</span>
-                      <div className="threat-content">
-                        <p className="threat-reason">{reason}</p>
-                        <p className="threat-risk-factor">Risk Factor: {selectedAlert.risk_factors[idx] || 'N/A'}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <div className="threat-list">{selectedAlert.reasons.map((reason, idx) => (<div key={idx} className="threat-item"><span className="threat-icon">🚨</span><div className="threat-content"><p className="threat-reason">{reason}</p><p className="threat-risk-factor">Risk Factor: {selectedAlert.risk_factors[idx] || 'N/A'}</p></div></div>))}</div>
               </div>
 
               <div className="investigation-card timeline">
                 <h3>Timeline</h3>
-                <div className="timeline-item">
-                  <span className="timeline-time">Alert Created</span>
-                  <span className="timeline-date">{new Date(selectedAlert.created_at).toLocaleString()}</span>
-                </div>
-                <div className="timeline-item">
-                  <span className="timeline-time">Current Status</span>
-                  <span className="timeline-date">{selectedAlert.status}</span>
-                </div>
+                <div className="timeline-item"><span className="timeline-time">Alert Created</span><span className="timeline-date">{new Date(selectedAlert.created_at).toLocaleString()}</span></div>
+                <div className="timeline-item"><span className="timeline-time">Current Status</span><span className="timeline-date">{selectedAlert.status}</span></div>
               </div>
 
               <div className="investigation-card recommended-actions">
                 <h3>Recommended Actions</h3>
                 <div className="action-list">
-                  <div className="action-item action-item-1">
-                    <span className="action-number">1</span>
-                    <span className="action-text">Review user access logs</span>
-                  </div>
-                  <div className="action-item action-item-2">
-                    <span className="action-number">2</span>
-                    <span className="action-text">Verify device fingerprint</span>
-                  </div>
-                  <div className="action-item action-item-3">
-                    <span className="action-number">3</span>
-                    <span className="action-text">Check location inconsistencies</span>
-                  </div>
+                  <div className="action-item action-item-1"><span className="action-number">1</span><span className="action-text">Review user access logs</span></div>
+                  <div className="action-item action-item-2"><span className="action-number">2</span><span className="action-text">Verify device fingerprint</span></div>
+                  <div className="action-item action-item-3"><span className="action-number">3</span><span className="action-text">Check location inconsistencies</span></div>
                   <div className="action-item action-item-4">
                     <span className="action-number">4</span>
-                    <span className="action-text">
-                      {selectedAlert.action === 'lock_account' ? 'Isolation required' : 'Re-authentication required'}
-                    </span>
+                    <span className="action-text">{selectedAlert.action === 'lock_account' ? 'Isolation required' : 'Re-authentication required'}</span>
+                    <div style={{ marginTop: 10 }}>
+                      <button className="btn" onClick={() => { setAdminPayload(JSON.stringify(createProfilePayloadFromAlert(selectedAlert), null, 2)); setShowAdmin(true); }}>➕ Create profile from alert</button>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="investigation-card confidence">
                 <h3>Confidence Metrics</h3>
-                <div className="confidence-bar">
-                  <div className="confidence-label">Detection Confidence</div>
-                  <div className="confidence-meter">
-                    <div 
-                      className="confidence-fill" 
-                      style={{ 
-                        width: `${selectedAlert.score * 100}%`,
-                        background: getSeverityColor(selectedAlert.severity)
-                      }}
-                    ></div>
-                  </div>
-                  <div className="confidence-value">{(selectedAlert.score * 100).toFixed(0)}%</div>
-                </div>
+                <div className="confidence-bar"><div className="confidence-label">Detection Confidence</div><div className="confidence-meter"><div className="confidence-fill" style={{ width: `${selectedAlert.score * 100}%`, background: getSeverityColor(selectedAlert.severity) }}></div></div><div className="confidence-value">{(selectedAlert.score * 100).toFixed(0)}%</div></div>
               </div>
 
               <div className="investigation-card resolution">
                 <h3>Resolution</h3>
-                <div className="resolution-buttons">
-                  <button className="btn-resolution resolve-now">
-                    ✓ Resolve Now
-                  </button>
-                  <button className="btn-resolution isolate-now">
-                    🔒 Lock Account
-                  </button>
-                  <button className="btn-resolution lock-now">
-                    🚫 Deny Access
-                  </button>
-                </div>
+                <div className="resolution-buttons"><button className="btn-resolution resolve-now">✓ Resolve Now</button><button className="btn-resolution isolate-now">🔒 Lock Account</button><button className="btn-resolution lock-now">🚫 Deny Access</button></div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="footer">
-        <p>AI Intrusion & Anomaly Detector v1.0 | Real-time Threat Detection System</p>
-      </footer>
+      {/* Admin Modal for Automated Reporter */}
+      {showAdmin && (
+        <div className="modal-overlay" onClick={closeAdmin}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={closeAdmin}>✕</button>
+            <h2 className="modal-title">🧾 Automated Reporter - Create Profile</h2>
+            <p style={{ textAlign: 'center', marginBottom: 8 }}>Paste a JSON payload for creating a profile. Example shape:
+              <code style={{ display: 'block', marginTop: 6, padding: 8, background: '#f4f4f4' }}>{`{ "site": "example.com", "username": "alice", "events": [ { /* LoginEvent fields */ } ] }`}</code>
+            </p>
+            <textarea value={adminPayload} onChange={(e) => setAdminPayload(e.target.value)} style={{ width: '100%', height: 220, padding: 12, fontFamily: 'monospace' }} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              <button className="btn btn-investigate" onClick={submitAdminProfile}>Create Profile</button>
+              <button className="btn" onClick={closeAdmin}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="footer"><p>AI Intrusion & Anomaly Detector v1.0 | Real-time Threat Detection System</p></footer>
     </div>
   );
 }
