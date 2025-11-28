@@ -1,0 +1,47 @@
+[
+  {
+    "event_id": "evt-001",
+    "timestamp": "2025-11-28T10:00:00Z",
+    "username": "alice",
+    "device_fingerprint": "dev-abc",
+    "location": "IN",
+    "typing_speed": 180.0,
+    "access_time": "10:00"
+  },
+  {
+    "event_id": "evt-002",
+    "timestamp": "2025-11-28T10:05:00Z",
+    "username": "bob",
+    "device_fingerprint": "dev-def",
+    "location": "US",
+    "typing_speed": 150.0,
+    "access_time": "10:05"
+  },
+  {
+    "event_id": "evt-003",
+    "timestamp": "2025-11-28T10:10:00Z",
+    "username": "carol",
+    "device_fingerprint": "dev-ghi",
+    "location": "RU",
+    "typing_speed": 250.0,
+    "access_time": "10:10"
+  },
+  {
+    "event_id": "evt-004",
+    "timestamp": "2025-11-28T10:15:00Z",
+    "username": "eve",
+    "device_fingerprint": "dev-jkl",
+    "location": "CN",
+    "typing_speed": 220.0,
+    "access_time": "10:15"
+  },
+  {
+    "event_id": "evt-005",
+    "timestamp": "2025-11-28T10:20:00Z",
+    "username": "alice",
+    "device_fingerprint": "dev-mno",
+    "location": "IN",
+    "typing_speed": 170.0,
+    "access_time": "10:20"
+  }
+]
